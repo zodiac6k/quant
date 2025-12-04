@@ -20,6 +20,24 @@ A comprehensive Python dashboard to track NASDAQ index movement, analyze stocks,
   - **Historical Data**: Recent price history
 - **📈 Visualizations**: Interactive bar charts comparing selected security vs NASDAQ performance
 
+## Quick Start
+
+**New to the project?** See [QUICK_START.md](QUICK_START.md) for step-by-step instructions to get the dashboard running in minutes!
+
+### Quick Commands
+
+```bash
+# Clone the repository
+git clone https://github.com/zodiac6k/quant.git
+cd quant
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the dashboard
+streamlit run nasdaq_dashboard.py
+```
+
 ## Installation
 
 1. Install required dependencies:
