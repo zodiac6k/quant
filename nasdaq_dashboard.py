@@ -1395,5 +1395,179 @@ def show_gainers_losers():
                 st.plotly_chart(fig, use_container_width=True)
 
 
+def show_diagnostics():
+    """Display diagnostic information about API keys and configuration."""
+    st.header("🔧 Diagnostics & Configuration")
+    
+    st.markdown("### API Key Status")
+    
+    # Check NewsAPI
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("NewsAPI Status")
+        newsapi = get_newsapi_client()
+        
+        if newsapi:
+            st.success("✅ NewsAPI is configured and available")
+            
+            # Try to get API key (masked)
+            try:
+                api_key = os.getenv('NEWSAPI_KEY')
+                if not api_key:
+                    try:
+                        api_key = st.secrets.get('NEWSAPI_KEY', None)
+                    except:
+                        pass
+                
+                if api_key:
+                    # Show masked key
+                    masked_key = api_key[:8] + "..." + api_key[-4:] if len(api_key) > 12 else "***"
+                    st.write(f"**API Key**: `{masked_key}`")
+                    st.write("**Status**: ✅ Valid")
+                    
+                    # Test the API
+                    with st.spinner("Testing NewsAPI connection..."):
+                        try:
+                            test_result = newsapi.get_everything(
+                                q='test',
+                                language='en',
+                                page_size=1
+                            )
+                            if test_result and test_result.get('status') == 'ok':
+                                st.success("✅ API connection successful!")
+                            elif test_result and test_result.get('status') == 'error':
+                                error_code = test_result.get('code', 'unknown')
+                                if error_code == 'rateLimited':
+                                    st.warning("⚠️ Rate limit reached (100 requests/day)")
+                                elif error_code == 'apiKeyInvalid':
+                                    st.error("❌ API key is invalid")
+                                else:
+                                    st.warning(f"⚠️ API Error: {error_code}")
+                        except Exception as e:
+                            st.error(f"❌ Connection error: {str(e)[:100]}")
+                else:
+                    st.warning("⚠️ API key not found in environment or secrets")
+            except Exception as e:
+                st.error(f"❌ Error checking API key: {str(e)[:100]}")
+        else:
+            st.warning("⚠️ NewsAPI is not configured")
+            
+            st.markdown("""
+            **To configure NewsAPI:**
+            
+            ### For Streamlit Cloud:
+            1. Go to [share.streamlit.io](https://share.streamlit.io)
+            2. Select your app
+            3. Click **Settings** → **Secrets**
+            4. Add:
+               ```toml
+               NEWSAPI_KEY = "your_api_key_here"
+               ```
+            5. Save and wait for redeploy
+            
+            ### For Local Development:
+            Create `.streamlit/secrets.toml`:
+            ```toml
+            NEWSAPI_KEY = "your_api_key_here"
+            ```
+            """)
+    
+    with col2:
+        st.subheader("Configuration Sources")
+        
+        # Check environment variables
+        env_key = os.getenv('NEWSAPI_KEY')
+        secrets_key = None
+        try:
+            secrets_key = st.secrets.get('NEWSAPI_KEY', None)
+        except:
+            pass
+        
+        st.write("**Environment Variables:**")
+        if env_key:
+            st.success("✅ `NEWSAPI_KEY` found in environment")
+        else:
+            st.info("ℹ️ `NEWSAPI_KEY` not in environment")
+        
+        st.write("**Streamlit Secrets:**")
+        if secrets_key:
+            st.success("✅ `NEWSAPI_KEY` found in secrets")
+        else:
+            st.info("ℹ️ `NEWSAPI_KEY` not in secrets")
+        
+        st.write("**Package Status:**")
+        if NEWSAPI_AVAILABLE:
+            st.success("✅ `newsapi-python` package installed")
+        else:
+            st.error("❌ `newsapi-python` package not installed")
+            st.write("Install with: `pip install newsapi-python`")
+    
+    st.markdown("---")
+    
+    # System Information
+    st.markdown("### System Information")
+    sys_col1, sys_col2 = st.columns(2)
+    
+    with sys_col1:
+        st.write("**Python Version:**")
+        import sys
+        st.code(sys.version)
+        
+        st.write("**Streamlit Version:**")
+        st.code(st.__version__)
+    
+    with sys_col2:
+        st.write("**Platform:**")
+        import platform
+        st.code(platform.platform())
+        
+        st.write("**Working Directory:**")
+        import os
+        st.code(os.getcwd())
+    
+    st.markdown("---")
+    
+    # Quick Test
+    st.markdown("### Quick API Test")
+    
+    test_stock = st.text_input("Test with a stock symbol:", value="AAPL")
+    
+    if st.button("Test NewsAPI with Stock"):
+        if test_stock:
+            with st.spinner(f"Testing NewsAPI with {test_stock}..."):
+                newsapi = get_newsapi_client()
+                if newsapi:
+                    try:
+                        # Try to get news
+                        articles = newsapi.get_everything(
+                            q=test_stock,
+                            language='en',
+                            sort_by='relevancy',
+                            page_size=5
+                        )
+                        
+                        if articles and articles.get('status') == 'ok':
+                            article_count = len(articles.get('articles', []))
+                            st.success(f"✅ Success! Found {article_count} articles for {test_stock}")
+                            
+                            if article_count > 0:
+                                st.write("**Sample articles:**")
+                                for i, article in enumerate(articles.get('articles', [])[:3], 1):
+                                    st.write(f"{i}. {article.get('title', 'N/A')}")
+                        elif articles and articles.get('status') == 'error':
+                            error_code = articles.get('code', 'unknown')
+                            error_msg = articles.get('message', 'Unknown error')
+                            st.error(f"❌ Error: {error_code} - {error_msg}")
+                        else:
+                            st.warning("⚠️ No articles found")
+                    except Exception as e:
+                        st.error(f"❌ Error: {str(e)[:200]}")
+                else:
+                    st.warning("⚠️ NewsAPI not configured")
+        else:
+            st.warning("Please enter a stock symbol")
+
+
 if __name__ == "__main__":
     main()
