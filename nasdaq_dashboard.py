@@ -939,7 +939,7 @@ def main():
     st.sidebar.header("Navigation")
     page = st.sidebar.selectbox(
         "Select Page",
-        ["Market Overview", "Stock Analysis", "Stock Summary", "Gainers & Losers"]
+        ["Market Overview", "Stock Analysis", "Stock Summary", "Gainers & Losers", "🔧 Diagnostics"]
     )
     
     if page == "Market Overview":
@@ -950,6 +950,8 @@ def main():
         show_stock_summary()
     elif page == "Gainers & Losers":
         show_gainers_losers()
+    elif page == "🔧 Diagnostics":
+        show_diagnostics()
 
 
 def show_market_overview():
