@@ -1055,31 +1055,35 @@ def show_stock_analysis():
                 else:
                     st.warning("No recent news found for this stock.")
                     
-                    # Show API setup instructions if NewsAPI not configured
+                    # Show API setup instructions if NewsAPI not configured (in collapsible section)
                     newsapi = get_newsapi_client()
                     if not newsapi:
-                        st.info("""
-                        **💡 Tip: Get Better News Coverage!**
-                        
-                        To get more comprehensive news coverage, set up a free NewsAPI account:
-                        
-                        1. **Get Free API Key**: Visit https://newsapi.org/register
-                        2. **Set API Key**: 
-                           - **Option A (Recommended)**: Create a `.streamlit/secrets.toml` file in your project directory:
-                             ```toml
-                             NEWSAPI_KEY = "your_api_key_here"
-                             ```
-                           - **Option B**: Set environment variable:
-                             ```bash
-                             export NEWSAPI_KEY="your_api_key_here"  # Linux/Mac
-                             set NEWSAPI_KEY=your_api_key_here       # Windows
-                             ```
-                        3. **Restart Dashboard**: Restart the Streamlit app after setting the key
-                        
-                        **Free Tier**: 100 requests/day (perfect for personal use!)
-                        """)
+                        with st.expander("💡 Want better news coverage? Set up NewsAPI (Optional)", expanded=False):
+                            st.markdown("""
+                            **Get more comprehensive news coverage with a free NewsAPI account:**
+                            
+                            ### For Local Development:
+                            1. **Get Free API Key**: Visit https://newsapi.org/register
+                            2. **Set API Key**: Create `.streamlit/secrets.toml`:
+                               ```toml
+                               NEWSAPI_KEY = "your_api_key_here"
+                               ```
+                            
+                            ### For Streamlit Cloud:
+                            1. Go to your app settings on [share.streamlit.io](https://share.streamlit.io)
+                            2. Click **"Secrets"** in the sidebar
+                            3. Add your API key:
+                               ```toml
+                               NEWSAPI_KEY = "your_api_key_here"
+                               ```
+                            4. The app will automatically redeploy
+                            
+                            **Free Tier**: 100 requests/day
+                            
+                            *Note: The dashboard works fine without NewsAPI using Yahoo Finance as a fallback.*
+                            """)
                     else:
-                        st.write("Possible reasons:")
+                        st.write("**Possible reasons:**")
                         st.write("- Limited news coverage for this stock")
                         st.write("- No recent news updates in the past week")
                         st.write("- News may be filtered out")
