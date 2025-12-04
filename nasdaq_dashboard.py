@@ -184,42 +184,88 @@ def get_news_from_newsapi(symbol, company_name=None):
     if not newsapi:
         return []
     
-    try:
-        # Try searching by company name first, then symbol
-        query = company_name if company_name else symbol
-        # Get news from last 7 days
-        from_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
-        
-        # Search for news
-        articles = newsapi.get_everything(
-            q=query,
-            language='en',
-            sort_by='relevancy',
-            from_param=from_date,
-            page_size=20
-        )
-        
-        if articles and articles.get('status') == 'ok':
-            news_list = []
-            for article in articles.get('articles', [])[:15]:
-                try:
-                    pub_date = datetime.strptime(article['publishedAt'], '%Y-%m-%dT%H:%M:%SZ')
-                    news_list.append({
-                        'title': article.get('title', 'N/A'),
-                        'publisher': article.get('source', {}).get('name', 'Unknown'),
-                        'link': article.get('url', '#'),
-                        'date': pub_date.strftime('%Y-%m-%d %H:%M'),
-                        'summary': article.get('description', '')[:300] + '...' if article.get('description') and len(article.get('description', '')) > 300 else (article.get('description', '') if article.get('description') else 'N/A')
-                    })
-                except:
-                    continue
-            
-            return news_list
-    except Exception as e:
-        # If rate limited or error, return empty
-        return []
+    news_list = []
     
-    return []
+    # Try multiple search strategies
+    search_queries = []
+    if company_name:
+        # Try full company name
+        search_queries.append(company_name)
+        # Try company name without common suffixes
+        if ' Inc.' in company_name:
+            search_queries.append(company_name.replace(' Inc.', ''))
+        if ' Corporation' in company_name:
+            search_queries.append(company_name.replace(' Corporation', ''))
+        if ' Corp.' in company_name:
+            search_queries.append(company_name.replace(' Corp.', ''))
+    
+    # Add symbol as search term
+    if symbol:
+        search_queries.append(symbol)
+        # Add "$" prefix for stock symbol searches
+        search_queries.append(f"${symbol}")
+    
+    # Remove duplicates
+    search_queries = list(dict.fromkeys(search_queries))
+    
+    for query in search_queries[:3]:  # Try up to 3 different queries
+        try:
+            # Get news from last 7 days
+            from_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+            
+            # Search for news
+            articles = newsapi.get_everything(
+                q=query,
+                language='en',
+                sort_by='relevancy',
+                from_param=from_date,
+                page_size=20
+            )
+            
+            if articles:
+                status = articles.get('status')
+                
+                if status == 'ok':
+                    for article in articles.get('articles', [])[:15]:
+                        try:
+                            pub_date_str = article.get('publishedAt', '')
+                            if pub_date_str:
+                                # Handle different date formats
+                                try:
+                                    pub_date = datetime.strptime(pub_date_str, '%Y-%m-%dT%H:%M:%SZ')
+                                except:
+                                    try:
+                                        pub_date = datetime.strptime(pub_date_str, '%Y-%m-%dT%H:%M:%S+00:00')
+                                    except:
+                                        pub_date = datetime.now()
+                            else:
+                                pub_date = datetime.now()
+                            
+                            news_list.append({
+                                'title': article.get('title', 'N/A'),
+                                'publisher': article.get('source', {}).get('name', 'Unknown'),
+                                'link': article.get('url', '#'),
+                                'date': pub_date.strftime('%Y-%m-%d %H:%M'),
+                                'summary': article.get('description', '')[:300] + '...' if article.get('description') and len(article.get('description', '')) > 300 else (article.get('description', '') if article.get('description') else 'N/A')
+                            })
+                        except Exception as e:
+                            continue
+                    
+                    # If we got results, stop trying other queries
+                    if news_list:
+                        break
+                        
+                elif status == 'error':
+                    error_code = articles.get('code', 'unknown')
+                    # Some errors we can ignore and try next query
+                    if error_code not in ['rateLimited', 'apiKeyInvalid']:
+                        continue
+                        
+        except Exception as e:
+            # Continue to next query if this one fails
+            continue
+    
+    return news_list
 
 
 def get_news_from_yfinance(ticker):
@@ -266,13 +312,19 @@ def get_news_data(ticker, symbol=None, company_name=None):
     """Fetch news data for a ticker using multiple sources."""
     news_list = []
     sources_used = []
+    debug_info = []
     
     # Try NewsAPI first (better quality)
-    if symbol or company_name:
+    newsapi = get_newsapi_client()
+    if newsapi and (symbol or company_name):
         newsapi_news = get_news_from_newsapi(symbol or '', company_name)
         if newsapi_news:
             news_list.extend(newsapi_news)
             sources_used.append('NewsAPI')
+        else:
+            debug_info.append('NewsAPI: No results found (may be rate limited or no recent news)')
+    elif not newsapi:
+        debug_info.append('NewsAPI: Not configured (using Yahoo Finance fallback)')
     
     # Fallback to yfinance
     if len(news_list) < 5:
@@ -285,6 +337,8 @@ def get_news_data(ticker, symbol=None, company_name=None):
                     news_list.append(news)
             if yfinance_news:
                 sources_used.append('Yahoo Finance')
+        else:
+            debug_info.append('Yahoo Finance: No recent news available')
     
     # Remove duplicates and sort by date
     seen_titles = set()
@@ -301,7 +355,7 @@ def get_news_data(ticker, symbol=None, company_name=None):
     except:
         pass
     
-    return unique_news[:15], sources_used  # Return top 15 and sources used
+    return unique_news[:15], sources_used, debug_info  # Return top 15, sources used, and debug info
 
 
 def extract_reasons_from_news(news_list):
@@ -640,7 +694,7 @@ def show_stock_summary():
                         except:
                             company_name = symbol
                         
-                        news_list, sources_used = get_news_data(ticker, symbol=symbol, company_name=company_name)
+                        news_list, sources_used, debug_info = get_news_data(ticker, symbol=symbol, company_name=company_name)
                         reasons = extract_reasons_from_news(news_list)
                         forecast, forecast_error = calculate_weekly_forecast(stock_data, reasons, ticker)
                         
@@ -1026,7 +1080,7 @@ def show_stock_analysis():
                 except:
                     company_name = selected_stock
                 
-                news_list, sources_used = get_news_data(ticker, symbol=selected_stock, company_name=company_name)
+                news_list, sources_used, debug_info = get_news_data(ticker, symbol=selected_stock, company_name=company_name)
                 
                 if news_list:
                     sources_text = " & ".join(sources_used) if sources_used else "Multiple sources"
@@ -1054,6 +1108,12 @@ def show_stock_analysis():
                                 st.write(news['summary'])
                 else:
                     st.warning("No recent news found for this stock.")
+                    
+                    # Show debug information
+                    if debug_info:
+                        with st.expander("🔍 Debug Information", expanded=False):
+                            for info in debug_info:
+                                st.write(f"- {info}")
                     
                     # Show API setup instructions if NewsAPI not configured (in collapsible section)
                     newsapi = get_newsapi_client()
@@ -1083,10 +1143,13 @@ def show_stock_analysis():
                             *Note: The dashboard works fine without NewsAPI using Yahoo Finance as a fallback.*
                             """)
                     else:
-                        st.write("**Possible reasons:**")
-                        st.write("- Limited news coverage for this stock")
-                        st.write("- No recent news updates in the past week")
-                        st.write("- News may be filtered out")
+                        st.info("""
+                        **NewsAPI is configured but no news was found. Possible reasons:**
+                        - Rate limit reached (100 requests/day on free tier) - wait or try tomorrow
+                        - No recent news in the past 7 days for this stock
+                        - NewsAPI search didn't match any articles
+                        - Try refreshing the page or checking a different stock
+                        """)
             
             with tab2:
                 st.subheader("📊 Analyst Ratings & Recommendations")
@@ -1161,7 +1224,7 @@ def show_stock_analysis():
                 except:
                     company_name = selected_stock
                 
-                news_list, sources_used = get_news_data(ticker, symbol=selected_stock, company_name=company_name)
+                news_list, sources_used, debug_info = get_news_data(ticker, symbol=selected_stock, company_name=company_name)
                 reasons = extract_reasons_from_news(news_list)
                 forecast, forecast_error = calculate_weekly_forecast(stock_data, reasons, ticker)
                 
